@@ -116,6 +116,13 @@ func _create_camera() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# Capture Space here before focused Godot UI Buttons consume the key.
+	# First press starts charging, second press releases the golf ball.
+	if event is InputEventKey and event.keycode == KEY_SPACE and event.pressed and not event.echo:
+		if mode != "menu":
+			_press_swing()
+			get_viewport().set_input_as_handled()
+		return
 	# _input is used instead of _unhandled_input so UI controls do not block
 	# right-click mouse camera movement on the game canvas.
 	if event is InputEventMouseButton:
@@ -494,7 +501,7 @@ func _create_ui() -> void:
 	meter.add_theme_stylebox_override("background", _panel_style(Color("#203f47"), Color("#417079"), 6))
 	meter.add_theme_stylebox_override("fill", _panel_style(Color("#e0a65b"), GOLD, 6))
 	meter_box.add_child(meter)
-	swing_button = _button("START SWING", Color("#ae7139"), Color("#ffd589"))
+	swing_button = _button("CHARGE [SPACE]", Color("#ae7139"), Color("#ffd589"))
 	swing_button.custom_minimum_size = Vector2(164, 60)
 	swing_button.pressed.connect(_press_swing)
 	row_two.add_child(swing_button)
@@ -570,7 +577,7 @@ func _create_ui() -> void:
 	faction_button.pressed.connect(func(): _start_mode("faction"))
 	menu_vbox.add_child(faction_button)
 	var note := Label.new()
-	note.text = "Tap 3 times: start meter → lock power → time accuracy.\nOriginal prototype • no third-party art or code"
+	note.text = "2 TAP SHOT: press SPACE to charge, press again to HIT.\nOr tap the on-screen CHARGE / HIT button."
 	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	note.add_theme_color_override("font_color", Color("#c9ddd5"))
 	note.add_theme_font_size_override("font_size", 12)
@@ -613,7 +620,7 @@ func _start_mode(next_mode: String) -> void:
 	hint_label.visible = true
 	menu_panel.visible = false
 	if mode == "golf":
-		hint_label.text = "W/A/S/D: MOVE  |  HOLD RIGHT MOUSE + DRAG: CAMERA  |  WALK NEAR BALL TO HIT"
+		hint_label.text = "W/A/S/D: MOVE | RIGHT MOUSE: CAMERA | SPACE: CHARGE, SPACE AGAIN: HIT"
 	elif mode == "defense":
 		hint_label.text = "DEFEND THE GATE  •  Aim at approaching enemies"
 	else:
@@ -654,16 +661,15 @@ func _press_swing() -> void:
 		return
 	if phase == "ready":
 		if not _near_ball():
-			hint_label.text = "TOO FAR! Move the character toward the ball using arrows or W/A/S/D."
+			hint_label.text = "TOO FAR! Walk closer to the golf ball using W/A/S/D or the D-pad."
 			return
 		phase = "power"
-		meter_time = 0
-		hint_label.text = "Tap again to LOCK POWER!"
+		power_percentage = 15.0
+		meter_time = 0.0
+		hint_label.text = "CHARGING! Press SPACE again (or tap HIT) to release."
 	elif phase == "power":
-		phase = "accuracy"
-		meter_time = 0
-		hint_label.text = "Tap near the CENTER for a perfect shot!"
-	elif phase == "accuracy":
+		# Two presses total: release immediately with the displayed power.
+		accuracy_value = 0.0
 		_launch()
 	_refresh_ui()
 
@@ -693,9 +699,6 @@ func _process(delta: float) -> void:
 	if phase == "power":
 		meter_time += dt
 		power_percentage = 15.0 + 85.0 * absf(sin(meter_time * 2.25))
-	elif phase == "accuracy":
-		meter_time += dt
-		accuracy_value = sin(meter_time * 3.1) * 100.0
 	if phase == "flying":
 		_simulate_ball(dt)
 	if mode == "defense" and phase != "done":
@@ -882,17 +885,13 @@ func _refresh_ui() -> void:
 	if mode == "golf" and phase == "ready" and not _near_ball():
 		swing_button.text = "MOVE NEAR BALL"
 	if phase == "ready":
-		swing_button.text = "START SWING" if _near_ball() else "MOVE NEAR BALL"
+		swing_button.text = "CHARGE [SPACE]" if _near_ball() else "MOVE NEAR BALL"
 		meter.value = power_percentage
-		meter_label.text = "BALL: " + ("IN RANGE" if _near_ball() else "TOO FAR") + "  •  FREE MOVE"
+		meter_label.text = "BALL: " + ("IN RANGE" if _near_ball() else "TOO FAR") + " | SPACE: CHARGE"
 	elif phase == "power":
-		swing_button.text = "LOCK POWER"
+		swing_button.text = "HIT! [SPACE]"
 		meter.value = power_percentage
-		meter_label.text = "POWER %d%%  •  TAP TO LOCK" % int(power_percentage)
-	elif phase == "accuracy":
-		swing_button.text = "HIT PERFECT!"
-		meter.value = (accuracy_value + 100.0) * 0.5
-		meter_label.text = "ACCURACY %d  •  CENTER = PERFECT" % int(absf(accuracy_value))
+		meter_label.text = "POWER %d%% | SPACE: HIT NOW" % int(power_percentage)
 	elif phase == "flying":
 		swing_button.text = "BALL FLYING..."
 		meter.value = power_percentage
@@ -905,7 +904,7 @@ func _refresh_ui() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
-			KEY_SPACE, KEY_ENTER:
+			KEY_ENTER:
 				if mode != "menu":
 					_press_swing()
 			KEY_LEFT:
