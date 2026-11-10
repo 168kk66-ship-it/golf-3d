@@ -1,0 +1,18 @@
+[config]
+config_version=5
+
+[application]
+config/name="Fairway Pocket - Golf 3D"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/description="Playable 3D golf prototype for touch screens and web browsers."
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/stretch/mode="canvas_items"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.52, 0.74, 0.91, 1)
