@@ -37,9 +37,19 @@ jobs:
 
       - name: Import and export the game
         run: |
+          set -euo pipefail
           mkdir -p web
-          godot --headless --editor --path . --quit
-          godot --headless --path . --export-release Web web/index.html
+          godot --headless --editor --path . --quit 2>&1 | tee godot-import.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' godot-import.log; then
+            echo "Godot script validation failed"
+            exit 1
+          fi
+          godot --headless --path . --export-release Web web/index.html 2>&1 | tee godot-export.log
+          if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' godot-export.log; then
+            echo "Godot script validation failed during export"
+            exit 1
+          fi
+          test -s web/index.html
           touch web/.nojekyll
 
       - name: Configure GitHub Pages
