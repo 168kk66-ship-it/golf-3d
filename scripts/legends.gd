@@ -19,6 +19,12 @@ var phase := "ready" # ready, power, accuracy, flying, done
 var rng := RandomNumberGenerator.new()
 var world_root: Node3D
 var cam: Camera3D
+# Hold RMB and drag to orbit the camera; release RMB to stop.
+var camera_dragging := false
+var camera_yaw := 0.0
+var camera_pitch := deg_to_rad(38.0)
+var camera_distance := 19.0
+const CAMERA_MOUSE_SENSITIVITY := 0.008
 var ball: MeshInstance3D
 var aim_guide: MeshInstance3D
 var golfer: Node3D
@@ -106,7 +112,35 @@ func _create_camera() -> void:
 	cam.fov = 62.0
 	add_child(cam)
 	cam.position = Vector3(0, 15, 39)
-	cam.look_at(Vector3(0, 0, -8), Vector3.UP)
+	cam.look_at(Vector3(0, 1.5, 18), Vector3.UP)
+
+
+func _input(event: InputEvent) -> void:
+	# _input is used instead of _unhandled_input so UI controls do not block
+	# right-click mouse camera movement on the game canvas.
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			camera_dragging = event.pressed and mode != "menu"
+			if camera_dragging:
+				get_viewport().set_input_as_handled()
+		elif event.pressed and mode != "menu":
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				camera_distance = clampf(camera_distance - 1.5, 7.0, 31.0)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				camera_distance = clampf(camera_distance + 1.5, 7.0, 31.0)
+	elif event is InputEventMouseMotion and camera_dragging:
+		camera_yaw -= event.relative.x * CAMERA_MOUSE_SENSITIVITY
+		camera_pitch = clampf(
+			camera_pitch + event.relative.y * CAMERA_MOUSE_SENSITIVITY,
+			deg_to_rad(10.0),
+			deg_to_rad(78.0)
+		)
+		get_viewport().set_input_as_handled()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		camera_dragging = false
 
 func _material(c: Color) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -543,6 +577,7 @@ func _create_ui() -> void:
 	menu_vbox.add_child(note)
 
 func _open_menu() -> void:
+	camera_dragging = false
 	mode = "menu"
 	phase = "ready"
 	hud_top.visible = false
@@ -578,7 +613,7 @@ func _start_mode(next_mode: String) -> void:
 	hint_label.visible = true
 	menu_panel.visible = false
 	if mode == "golf":
-		hint_label.text = "Hold arrows / W A S D to move freely. Walk near the ball to hit."
+		hint_label.text = "W/A/S/D: MOVE  |  HOLD RIGHT MOUSE + DRAG: CAMERA  |  WALK NEAR BALL TO HIT"
 	elif mode == "defense":
 		hint_label.text = "DEFEND THE GATE  •  Aim at approaching enemies"
 	else:
@@ -666,10 +701,15 @@ func _process(delta: float) -> void:
 	if mode == "defense" and phase != "done":
 		_update_defense(dt)
 	if is_instance_valid(ball):
-		var focus := ball.position if phase == "flying" else golfer.position
-		var target := focus + Vector3(0, 12.0, 17.0)
-		cam.position = cam.position.lerp(target, minf(dt * 2.5, 1.0))
-		cam.look_at(focus + Vector3(0, 0, -8), Vector3.UP)
+		var focus: Vector3 = ball.position if phase == "flying" else golfer.position
+		var orbit_offset := Vector3(
+			sin(camera_yaw) * cos(camera_pitch) * camera_distance,
+			sin(camera_pitch) * camera_distance,
+			cos(camera_yaw) * cos(camera_pitch) * camera_distance
+		)
+		var target := focus + Vector3(0, 1.4, 0) + orbit_offset
+		cam.position = cam.position.lerp(target, minf(dt * 7.0, 1.0))
+		cam.look_at(focus + Vector3(0, 1.25, 0), Vector3.UP)
 	_refresh_ui()
 
 func _simulate_ball(dt: float) -> void:
