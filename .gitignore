@@ -1,0 +1,5 @@
+.godot/
+.import/
+web/
+.DS_Store
+*.tmp
