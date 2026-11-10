@@ -21,6 +21,24 @@ var world_root: Node3D
 var cam: Camera3D
 var ball: MeshInstance3D
 var aim_guide: MeshInstance3D
+var golfer: Node3D
+var golfer_visual: Node3D
+var left_leg: Node3D
+var right_leg: Node3D
+var left_arm: Node3D
+var right_arm: Node3D
+var move_panel: PanelContainer
+var run_button: Button
+var chase_button: Button
+var move_x := 0.0
+var move_z := 0.0
+var is_running := true
+var chase_ball := false
+var walk_clock := 0.0
+var avatar_heading := 0.0
+const WALK_SPEED := 3.4
+const RUN_SPEED := 7.3
+const SHOT_RANGE := 2.5
 var velocity := Vector3.ZERO
 var power_percentage := 60.0
 var accuracy_value := 0.0
@@ -162,7 +180,146 @@ func _create_course(for_mode: String) -> void:
 			_box(world_root, Vector3(2, 0.5, 2), Vector3(x, 5.2, 24), Color("#b48868"))
 	ball = _sphere(world_root, 0.25, TEE, WHITE)
 	aim_guide = _box(world_root, Vector3(0.085, 0.025, 4.6), Vector3.ZERO, GOLD)
+	_create_golfer()
 	_update_guide()
+
+# Original low-poly 3D golfer: head, cap, torso, arms, swinging legs and club.
+# The mesh is built entirely from Godot primitives and remains editable.
+func _create_golfer() -> void:
+	golfer = Node3D.new()
+	golfer.position = TEE + Vector3(1.45, -0.16, 0.75)
+	world_root.add_child(golfer)
+	golfer_visual = Node3D.new()
+	golfer.add_child(golfer_visual)
+	# Shoes / legs have separate pivots for a visible running animation.
+	for sign in [-1.0, 1.0]:
+		var leg := Node3D.new()
+		leg.position = Vector3(sign * 0.26, 0.96, 0.02)
+		golfer_visual.add_child(leg)
+		_box(leg, Vector3(0.29, 0.79, 0.32), Vector3(0, -0.4, 0), Color("#263e56"))
+		_box(leg, Vector3(0.37, 0.18, 0.57), Vector3(0, -0.83, -0.13), Color("#f4f6f3"))
+		if sign < 0:
+			left_leg = leg
+		else:
+			right_leg = leg
+	_box(golfer_visual, Vector3(0.94, 1.14, 0.47), Vector3(0, 1.55, 0), Color("#e2e7e5"))
+	_box(golfer_visual, Vector3(0.86, 0.33, 0.51), Vector3(0, 1.11, 0), Color("#2e6254"))
+	_box(golfer_visual, Vector3(0.48, 0.56, 0.035), Vector3(0, 1.68, -0.26), Color("#327c67"))
+	_sphere(golfer_visual, 0.34, Vector3(0, 2.43, -0.02), Color("#d7a67f"))
+	# Cap and brim; golfer faces local -Z.
+	_cylinder(golfer_visual, 0.35, 0.17, Vector3(0, 2.73, 0), Color("#1a7258"))
+	_box(golfer_visual, Vector3(0.70, 0.06, 0.31), Vector3(0, 2.70, -0.25), Color("#15533f"))
+	_sphere(golfer_visual, 0.05, Vector3(-0.12, 2.46, -0.319), Color("#302922"))
+	_sphere(golfer_visual, 0.05, Vector3(0.12, 2.46, -0.319), Color("#302922"))
+	for sign in [-1.0, 1.0]:
+		var arm := Node3D.new()
+		arm.position = Vector3(sign * 0.58, 1.94, 0.0)
+		golfer_visual.add_child(arm)
+		_box(arm, Vector3(0.29, 0.58, 0.34), Vector3(0, -0.26, 0), Color("#e4e8e6"))
+		_box(arm, Vector3(0.23, 0.38, 0.25), Vector3(0, -0.68, 0), Color("#d7a67f"))
+		if sign < 0:
+			left_arm = arm
+		else:
+			right_arm = arm
+	# Golf club attached to the golfer's right hand.
+	_cylinder(right_arm, 0.037, 1.45, Vector3(0.11, -1.40, -0.20), Color("#b9c6c9"))
+	_box(right_arm, Vector3(0.35, 0.13, 0.22), Vector3(0.0, -2.14, -0.26), Color("#404f5b"))
+	avatar_heading = 0.0
+	golfer_visual.rotation.y = avatar_heading
+	chase_ball = false
+	move_x = 0.0
+	move_z = 0.0
+
+
+func _move_hold(axis: String, value: float, held: bool) -> void:
+	if axis == "x":
+		move_x = value if held else (0.0 if is_equal_approx(move_x, value) else move_x)
+	else:
+		move_z = value if held else (0.0 if is_equal_approx(move_z, value) else move_z)
+	if held:
+		chase_ball = false
+
+
+func _direction_button(label_text: String, axis: String, value: float) -> Button:
+	var btn := _button(label_text, Color("#285e83"), Color("#8ad7fc"))
+	btn.custom_minimum_size = Vector2(57, 47)
+	btn.button_down.connect(func(): _move_hold(axis, value, true))
+	btn.button_up.connect(func(): _move_hold(axis, value, false))
+	return btn
+
+
+func _toggle_run() -> void:
+	is_running = not is_running
+	run_button.text = "RUN ON" if is_running else "WALK"
+	if is_running:
+		hint_label.text = "Running mode: hold direction buttons or use W/A/S/D."
+	else:
+		hint_label.text = "Walking mode: hold direction buttons or use W/A/S/D."
+
+
+func _chase_golf_ball() -> void:
+	if mode == "menu" or phase == "flying":
+		return
+	chase_ball = true
+	hint_label.text = "Golfer is running toward the ball. Tap a direction to steer."
+
+
+func _near_ball() -> bool:
+	if not is_instance_valid(golfer) or not is_instance_valid(ball):
+		return false
+	return Vector2(golfer.position.x, golfer.position.z).distance_to(Vector2(ball.position.x, ball.position.z)) < SHOT_RANGE
+
+
+func _animate_golfer(dt: float, moving: bool, pace: float) -> void:
+	if not is_instance_valid(golfer_visual):
+		return
+	if moving:
+		walk_clock += dt * pace
+	var swing := sin(walk_clock) * (0.8 if moving else 0.0)
+	left_leg.rotation.x = lerpf(left_leg.rotation.x, swing, minf(dt * 14.0, 1.0))
+	right_leg.rotation.x = lerpf(right_leg.rotation.x, -swing, minf(dt * 14.0, 1.0))
+	left_arm.rotation.x = lerpf(left_arm.rotation.x, -swing * 0.75, minf(dt * 12.0, 1.0))
+	right_arm.rotation.x = lerpf(right_arm.rotation.x, swing * 0.40, minf(dt * 12.0, 1.0))
+	var y_offset := absf(sin(walk_clock)) * 0.07 if moving else 0.0
+	golfer_visual.position.y = lerpf(golfer_visual.position.y, y_offset, minf(dt * 12.0, 1.0))
+
+
+func _update_golfer(dt: float) -> void:
+	if mode == "menu" or not is_instance_valid(golfer):
+		return
+	var walking := Vector3.ZERO
+	if phase == "ready" or phase == "done":
+		walking.x = move_x
+		walking.z = move_z
+		if Input.is_key_pressed(KEY_A):
+			walking.x -= 1.0
+		if Input.is_key_pressed(KEY_D):
+			walking.x += 1.0
+		if Input.is_key_pressed(KEY_W):
+			walking.z -= 1.0
+		if Input.is_key_pressed(KEY_S):
+			walking.z += 1.0
+		if chase_ball:
+			var target := ball.position - golfer.position
+			target.y = 0
+			if target.length() <= 1.58:
+				chase_ball = false
+				hint_label.text = "At the ball! Aim and tap START SWING."
+			else:
+				walking = target.normalized()
+	var moving := walking.length_squared() > 0.01
+	if moving:
+		walking = walking.normalized()
+		var pace := RUN_SPEED if is_running or chase_ball or Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
+		golfer.position += walking * pace * dt
+		golfer.position.x = clampf(golfer.position.x, -33.0, 33.0)
+		golfer.position.z = clampf(golfer.position.z, -45.0, 45.0)
+		avatar_heading = atan2(walking.x, -walking.z)
+		golfer_visual.rotation.y = lerp_angle(golfer_visual.rotation.y, avatar_heading, minf(dt * 12.0, 1.0))
+		_animate_golfer(dt, true, 12.0 if is_running or chase_ball else 7.0)
+	else:
+		_animate_golfer(dt, false, 0.0)
+
 
 func _panel_style(color: Color, border: Color, radius: int = 17) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -298,6 +455,39 @@ func _create_ui() -> void:
 	swing_button.pressed.connect(_press_swing)
 	row_two.add_child(swing_button)
 
+	# Visible mobile direction pad, run toggle and approach-ball shortcut.
+	move_panel = PanelContainer.new()
+	move_panel.anchor_left = 0
+	move_panel.anchor_right = 0
+	move_panel.anchor_top = 1
+	move_panel.anchor_bottom = 1
+	move_panel.offset_left = 10
+	move_panel.offset_right = 275
+	move_panel.offset_top = -315
+	move_panel.offset_bottom = -163
+	move_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.05, 0.15, 0.18, 0.80), Color("#7bcfa4"), 15))
+	root.add_child(move_panel)
+	var movement_box := VBoxContainer.new()
+	movement_box.add_theme_constant_override("separation", 3)
+	move_panel.add_child(movement_box)
+	var move_top := HBoxContainer.new()
+	move_top.add_theme_constant_override("separation", 5)
+	movement_box.add_child(move_top)
+	move_top.add_child(_direction_button("▲", "z", -1.0))
+	chase_button = _button("GO TO BALL", Color("#26735c"), GOLD)
+	chase_button.pressed.connect(_chase_golf_ball)
+	move_top.add_child(chase_button)
+	var move_bottom := HBoxContainer.new()
+	move_bottom.add_theme_constant_override("separation", 5)
+	movement_box.add_child(move_bottom)
+	move_bottom.add_child(_direction_button("◀", "x", -1.0))
+	move_bottom.add_child(_direction_button("▼", "z", 1.0))
+	move_bottom.add_child(_direction_button("▶", "x", 1.0))
+	run_button = _button("RUN ON", Color("#8a632b"), GOLD)
+	run_button.custom_minimum_size = Vector2(190, 40)
+	run_button.pressed.connect(_toggle_run)
+	movement_box.add_child(run_button)
+
 	menu_panel = PanelContainer.new()
 	menu_panel.anchor_left = 0.14
 	menu_panel.anchor_right = 0.86
@@ -343,7 +533,11 @@ func _open_menu() -> void:
 	hud_top.visible = false
 	hud_bottom.visible = false
 	hint_label.visible = false
+	move_panel.visible = false
 	menu_panel.visible = true
+	move_x = 0.0
+	move_z = 0.0
+	chase_ball = false
 
 func _start_mode(next_mode: String) -> void:
 	mode = next_mode
@@ -367,6 +561,7 @@ func _start_mode(next_mode: String) -> void:
 	last_lie = TEE
 	hud_top.visible = true
 	hud_bottom.visible = true
+	move_panel.visible = true
 	hint_label.visible = true
 	menu_panel.visible = false
 	if mode == "golf":
@@ -410,6 +605,10 @@ func _press_swing() -> void:
 	if mode == "menu" or phase == "done" or phase == "flying":
 		return
 	if phase == "ready":
+		if not _near_ball():
+			hint_label.text = "TOO FAR! Walk/run to the ball or press GO TO BALL."
+			chase_ball = true
+			return
 		phase = "power"
 		meter_time = 0
 		hint_label.text = "Tap again to LOCK POWER!"
@@ -443,6 +642,7 @@ func _process(delta: float) -> void:
 		cam.position = cam.position.lerp(Vector3(0, 16, 40), minf(dt * 1.6, 1.0))
 		cam.look_at(Vector3(0, 0, -10), Vector3.UP)
 		return
+	_update_golfer(dt)
 	if phase == "power":
 		meter_time += dt
 		power_percentage = 15.0 + 85.0 * absf(sin(meter_time * 2.25))
@@ -454,9 +654,10 @@ func _process(delta: float) -> void:
 	if mode == "defense" and phase != "done":
 		_update_defense(dt)
 	if is_instance_valid(ball):
-		var target := ball.position + Vector3(0, 13, 20)
-		cam.position = cam.position.lerp(target, minf(dt * 2.2, 1.0))
-		cam.look_at(ball.position + Vector3(0, 0, -11), Vector3.UP)
+		var focus := ball.position if phase == "flying" else golfer.position
+		var target := focus + Vector3(0, 12.0, 17.0)
+		cam.position = cam.position.lerp(target, minf(dt * 2.5, 1.0))
+		cam.look_at(focus + Vector3(0, 0, -8), Vector3.UP)
 	_refresh_ui()
 
 func _simulate_ball(dt: float) -> void:
@@ -543,6 +744,9 @@ func _ready_again(message: String) -> void:
 func _reset_ball_to_tee() -> void:
 	velocity = Vector3.ZERO
 	ball.position = TEE
+	if is_instance_valid(golfer):
+		golfer.position = TEE + Vector3(1.45, -0.16, 0.75)
+	chase_ball = false
 	aim_degrees = 0
 	phase = "ready"
 	aim_guide.visible = true
@@ -623,10 +827,12 @@ func _refresh_ui() -> void:
 	club_button.text = CLUB_NAMES[club_index]
 	spin_button.text = "SPIN %d" % spin_index
 	swing_button.disabled = phase == "flying" or phase == "done"
+	if mode == "golf" and phase == "ready" and not _near_ball():
+		swing_button.text = "GO TO BALL FIRST"
 	if phase == "ready":
-		swing_button.text = "START SWING"
+		swing_button.text = "START SWING" if _near_ball() else "GO TO BALL FIRST"
 		meter.value = power_percentage
-		meter_label.text = "READY  •  3 TAP SHOT"
+		meter_label.text = "NEAR BALL: " + ("YES" if _near_ball() else "NO") + "  •  RUN TO BALL"
 	elif phase == "power":
 		swing_button.text = "LOCK POWER"
 		meter.value = power_percentage
@@ -650,10 +856,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_SPACE, KEY_ENTER:
 				if mode != "menu":
 					_press_swing()
-			KEY_LEFT, KEY_A:
+			KEY_LEFT:
 				_adjust_aim(-4.0)
-			KEY_RIGHT, KEY_D:
+			KEY_RIGHT:
 				_adjust_aim(4.0)
+			KEY_G:
+				_chase_golf_ball()
+			KEY_R:
+				_toggle_run()
 			KEY_TAB:
 				_switch_club()
 			KEY_ESCAPE:
