@@ -71,12 +71,16 @@ var meter: ProgressBar
 var meter_label: Label
 
 func _ready() -> void:
+	print("FAIRWAY_SCENE_READY")
 	rng.seed = 20261110
 	_create_environment()
 	_create_camera()
 	_create_ui()
 	_create_course("golf")
 	_open_menu()
+	if has_node("DiagnosticUI"):
+		get_node("DiagnosticUI").visible = false
+	print("FAIRWAY_SCENE_INITIALIZED")
 
 func _create_environment() -> void:
 	var env_node := WorldEnvironment.new()
@@ -202,13 +206,23 @@ func _create_golfer() -> void:
 			left_leg = leg
 		else:
 			right_leg = leg
-	_box(golfer_visual, Vector3(0.94, 1.14, 0.47), Vector3(0, 1.55, 0), Color("#e2e7e5"))
+	_box(golfer_visual, Vector3(0.94, 1.14, 0.47), Vector3(0, 1.55, 0), Color("#b9894a"))
+	# Gold-plated fantasy sport armor, original geometry with Thai-fantasy accents.
+	_box(golfer_visual, Vector3(0.98, 0.18, 0.58), Vector3(0, 1.99, 0), Color("#e6bd59"))
+	_box(golfer_visual, Vector3(0.98, 0.15, 0.58), Vector3(0, 1.21, 0), Color("#e7c06a"))
+	_box(golfer_visual, Vector3(0.14, 0.77, 0.065), Vector3(0, 1.60, -0.30), Color("#f1d181"))
+	_sphere(golfer_visual, 0.35, Vector3(-0.53, 1.94, 0.0), Color("#d4a342"))
+	_sphere(golfer_visual, 0.35, Vector3(0.53, 1.94, 0.0), Color("#d4a342"))
 	_box(golfer_visual, Vector3(0.86, 0.33, 0.51), Vector3(0, 1.11, 0), Color("#2e6254"))
-	_box(golfer_visual, Vector3(0.48, 0.56, 0.035), Vector3(0, 1.68, -0.26), Color("#327c67"))
+	_box(golfer_visual, Vector3(0.48, 0.56, 0.055), Vector3(0, 1.68, -0.30), Color("#5c3236"))
+	_box(golfer_visual, Vector3(0.15, 0.35, 0.07), Vector3(0, 1.67, -0.35), Color("#e9c466"))
 	_sphere(golfer_visual, 0.34, Vector3(0, 2.43, -0.02), Color("#d7a67f"))
 	# Cap and brim; golfer faces local -Z.
-	_cylinder(golfer_visual, 0.35, 0.17, Vector3(0, 2.73, 0), Color("#1a7258"))
-	_box(golfer_visual, Vector3(0.70, 0.06, 0.31), Vector3(0, 2.70, -0.25), Color("#15533f"))
+	# Hair, headband and beard instead of the old golfer cap.
+	_sphere(golfer_visual, 0.33, Vector3(0, 2.70, 0.09), Color("#25242c"))
+	_box(golfer_visual, Vector3(0.53, 0.10, 0.41), Vector3(0, 2.68, -0.15), Color("#e9c466"))
+	_sphere(golfer_visual, 0.20, Vector3(0, 2.27, -0.22), Color("#302a2b"))
+	_box(golfer_visual, Vector3(0.24, 0.14, 0.08), Vector3(0, 2.28, -0.34), Color("#2e292c"))
 	_sphere(golfer_visual, 0.05, Vector3(-0.12, 2.46, -0.319), Color("#302922"))
 	_sphere(golfer_visual, 0.05, Vector3(0.12, 2.46, -0.319), Color("#302922"))
 	for sign in [-1.0, 1.0]:
@@ -356,9 +370,10 @@ func _create_ui() -> void:
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
 	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	canvas.add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.size = get_viewport().get_visible_rect().size
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	hud_top = PanelContainer.new()
 	hud_top.anchor_left = 0
