@@ -78,8 +78,9 @@ func _ready() -> void:
 	_create_ui()
 	_create_course("golf")
 	_open_menu()
-	if has_node("DiagnosticUI"):
-		get_node("DiagnosticUI").visible = false
+	if has_node("DiagnosticUI/Hint"):
+		var diagnostic := get_node("DiagnosticUI/Hint") as Label
+		diagnostic.text = "FAIRWAY 3D  |  SCENE LOADED  |  WALK TO BALL"
 	print("FAIRWAY_SCENE_INITIALIZED")
 
 func _create_environment() -> void:
