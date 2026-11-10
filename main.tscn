@@ -1,6 +1,86 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/legends.gd" id="1_game"]
 
+[sub_resource type="StandardMaterial3D" id="1_grass"]
+albedo_color = Color(0.27, 0.58, 0.34, 1)
+
+[sub_resource type="StandardMaterial3D" id="2_armor"]
+albedo_color = Color(0.78, 0.49, 0.20, 1)
+
+[sub_resource type="StandardMaterial3D" id="3_gold"]
+albedo_color = Color(0.95, 0.77, 0.32, 1)
+
+[sub_resource type="StandardMaterial3D" id="4_head"]
+albedo_color = Color(0.80, 0.58, 0.39, 1)
+
+[sub_resource type="StandardMaterial3D" id="5_dark"]
+albedo_color = Color(0.13, 0.17, 0.20, 1)
+
+[sub_resource type="BoxMesh" id="6_ground"]
+size = Vector3(70, 0.14, 105)
+
+[sub_resource type="BoxMesh" id="7_torso"]
+size = Vector3(0.96, 1.25, 0.60)
+
+[sub_resource type="SphereMesh" id="8_head"]
+radius = 0.34
+height = 0.68
+
 [node name="FairwayPocket" type="Node3D"]
 script = ExtResource("1_game")
+
+[node name="StaticSkySun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.93, -0.38, 0)
+light_energy = 1.1
+
+[node name="StaticFallbackCamera" type="Camera3D" parent="."]
+position = Vector3(0, 15, 39)
+rotation = Vector3(-0.30, 0, 0)
+current = true
+fov = 62.0
+
+[node name="StaticFallbackGround" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.17, -1)
+mesh = SubResource("6_ground")
+material_override = SubResource("1_grass")
+
+[node name="StaticWarrior" type="Node3D" parent="."]
+position = Vector3(-1.1, 0, 20.0)
+
+[node name="Body" type="MeshInstance3D" parent="StaticWarrior"]
+position = Vector3(0, 1.53, 0)
+mesh = SubResource("7_torso")
+material_override = SubResource("2_armor")
+
+[node name="Face" type="MeshInstance3D" parent="StaticWarrior"]
+position = Vector3(0, 2.42, -0.02)
+mesh = SubResource("8_head")
+material_override = SubResource("4_head")
+
+[node name="Hair" type="MeshInstance3D" parent="StaticWarrior"]
+position = Vector3(0, 2.67, 0.05)
+scale = Vector3(1.1, 0.55, 1.0)
+mesh = SubResource("8_head")
+material_override = SubResource("5_dark")
+
+[node name="GoldenChest" type="MeshInstance3D" parent="StaticWarrior"]
+position = Vector3(0, 1.60, -0.325)
+scale = Vector3(0.30, 0.65, 0.13)
+mesh = SubResource("7_torso")
+material_override = SubResource("3_gold")
+
+[node name="DiagnosticUI" type="CanvasLayer" parent="."]
+layer = 3
+
+[node name="Hint" type="Label" parent="DiagnosticUI"]
+offset_left = 14.0
+offset_top = 86.0
+offset_right = 790.0
+offset_bottom = 123.0
+theme_override_colors/font_color = Color(1, 0.92, 0.59, 1)
+theme_override_colors/font_shadow_color = Color(0.04, 0.11, 0.13, 1)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 18
+text = "FAIRWAY 3D  |  ENGINE STARTING  |  CHARACTER MODEL LOADED"
