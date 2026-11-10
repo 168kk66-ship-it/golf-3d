@@ -550,7 +550,7 @@ func _reset_ball_to_tee() -> void:
 
 func _spawn_enemy() -> void:
 	var lanes := [-6.0, 0.0, 6.0]
-	var lane := lanes[rng.randi_range(0, 2)]
+	var lane: float = float(lanes[rng.randi_range(0, 2)])
 	var foe := Node3D.new()
 	foe.position = Vector3(lane, 0, -37)
 	world_root.add_child(foe)
