@@ -29,11 +29,13 @@ var left_arm: Node3D
 var right_arm: Node3D
 var move_panel: PanelContainer
 var run_button: Button
-var chase_button: Button
 var move_x := 0.0
 var move_z := 0.0
+var held_left := false
+var held_right := false
+var held_up := false
+var held_down := false
 var is_running := true
-var chase_ball := false
 var walk_clock := 0.0
 var avatar_heading := 0.0
 const WALK_SPEED := 3.4
@@ -241,43 +243,43 @@ func _create_golfer() -> void:
 	_box(right_arm, Vector3(0.35, 0.13, 0.22), Vector3(0.0, -2.14, -0.26), Color("#404f5b"))
 	avatar_heading = 0.0
 	golfer_visual.rotation.y = avatar_heading
-	chase_ball = false
+	_clear_movement()
+
+
+func _clear_movement() -> void:
+	held_left = false
+	held_right = false
+	held_up = false
+	held_down = false
 	move_x = 0.0
 	move_z = 0.0
 
-
 func _move_hold(axis: String, value: float, held: bool) -> void:
 	if axis == "x":
-		move_x = value if held else (0.0 if is_equal_approx(move_x, value) else move_x)
+		if value < 0.0:
+			held_left = held
+		else:
+			held_right = held
 	else:
-		move_z = value if held else (0.0 if is_equal_approx(move_z, value) else move_z)
-	if held:
-		chase_ball = false
-
+		if value < 0.0:
+			held_up = held
+		else:
+			held_down = held
+	move_x = float(int(held_right) - int(held_left))
+	move_z = float(int(held_down) - int(held_up))
 
 func _direction_button(label_text: String, axis: String, value: float) -> Button:
 	var btn := _button(label_text, Color("#285e83"), Color("#8ad7fc"))
-	btn.custom_minimum_size = Vector2(57, 47)
+	btn.custom_minimum_size = Vector2(64, 48)
 	btn.button_down.connect(func(): _move_hold(axis, value, true))
 	btn.button_up.connect(func(): _move_hold(axis, value, false))
+	btn.focus_mode = Control.FOCUS_NONE
 	return btn
-
 
 func _toggle_run() -> void:
 	is_running = not is_running
-	run_button.text = "RUN ON" if is_running else "WALK"
-	if is_running:
-		hint_label.text = "Running mode: hold direction buttons or use W/A/S/D."
-	else:
-		hint_label.text = "Walking mode: hold direction buttons or use W/A/S/D."
-
-
-func _chase_golf_ball() -> void:
-	if mode == "menu" or phase == "flying":
-		return
-	chase_ball = true
-	hint_label.text = "Golfer is running toward the ball. Tap a direction to steer."
-
+	run_button.text = "RUN: ON" if is_running else "WALK MODE"
+	hint_label.text = "You decide where to walk or run. Hold arrow buttons or W/A/S/D."
 
 func _near_ball() -> bool:
 	if not is_instance_valid(golfer) or not is_instance_valid(ball):
@@ -302,36 +304,28 @@ func _animate_golfer(dt: float, moving: bool, pace: float) -> void:
 func _update_golfer(dt: float) -> void:
 	if mode == "menu" or not is_instance_valid(golfer):
 		return
-	var walking := Vector3.ZERO
+	var direction := Vector3.ZERO
 	if phase == "ready" or phase == "done":
-		walking.x = move_x
-		walking.z = move_z
+		direction.x = move_x
+		direction.z = move_z
 		if Input.is_key_pressed(KEY_A):
-			walking.x -= 1.0
+			direction.x -= 1.0
 		if Input.is_key_pressed(KEY_D):
-			walking.x += 1.0
+			direction.x += 1.0
 		if Input.is_key_pressed(KEY_W):
-			walking.z -= 1.0
+			direction.z -= 1.0
 		if Input.is_key_pressed(KEY_S):
-			walking.z += 1.0
-		if chase_ball:
-			var target := ball.position - golfer.position
-			target.y = 0
-			if target.length() <= 1.58:
-				chase_ball = false
-				hint_label.text = "At the ball! Aim and tap START SWING."
-			else:
-				walking = target.normalized()
-	var moving := walking.length_squared() > 0.01
+			direction.z += 1.0
+	var moving := direction.length_squared() > 0.01
 	if moving:
-		walking = walking.normalized()
-		var pace := RUN_SPEED if is_running or chase_ball or Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
-		golfer.position += walking * pace * dt
+		direction = direction.normalized()
+		var pace := RUN_SPEED if is_running or Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
+		golfer.position += direction * pace * dt
 		golfer.position.x = clampf(golfer.position.x, -33.0, 33.0)
 		golfer.position.z = clampf(golfer.position.z, -45.0, 45.0)
-		avatar_heading = atan2(walking.x, -walking.z)
+		avatar_heading = atan2(direction.x, -direction.z)
 		golfer_visual.rotation.y = lerp_angle(golfer_visual.rotation.y, avatar_heading, minf(dt * 12.0, 1.0))
-		_animate_golfer(dt, true, 12.0 if is_running or chase_ball else 7.0)
+		_animate_golfer(dt, true, 12.0 if pace > WALK_SPEED else 7.0)
 	else:
 		_animate_golfer(dt, false, 0.0)
 
@@ -471,7 +465,7 @@ func _create_ui() -> void:
 	swing_button.pressed.connect(_press_swing)
 	row_two.add_child(swing_button)
 
-	# Visible mobile direction pad, run toggle and approach-ball shortcut.
+	# Free-roam D-pad; movement is never automated.
 	move_panel = PanelContainer.new()
 	move_panel.anchor_left = 0
 	move_panel.anchor_right = 0
@@ -489,17 +483,22 @@ func _create_ui() -> void:
 	var move_top := HBoxContainer.new()
 	move_top.add_theme_constant_override("separation", 5)
 	movement_box.add_child(move_top)
+	var pad_spacer := Control.new()
+	pad_spacer.custom_minimum_size = Vector2(68, 8)
+	move_top.add_child(pad_spacer)
 	move_top.add_child(_direction_button("▲", "z", -1.0))
-	chase_button = _button("GO TO BALL", Color("#26735c"), GOLD)
-	chase_button.pressed.connect(_chase_golf_ball)
-	move_top.add_child(chase_button)
+	var move_hint := Label.new()
+	move_hint.text = "FREE MOVE"
+	move_hint.add_theme_font_size_override("font_size", 13)
+	move_hint.add_theme_color_override("font_color", GOLD)
+	move_top.add_child(move_hint)
 	var move_bottom := HBoxContainer.new()
 	move_bottom.add_theme_constant_override("separation", 5)
 	movement_box.add_child(move_bottom)
 	move_bottom.add_child(_direction_button("◀", "x", -1.0))
 	move_bottom.add_child(_direction_button("▼", "z", 1.0))
 	move_bottom.add_child(_direction_button("▶", "x", 1.0))
-	run_button = _button("RUN ON", Color("#8a632b"), GOLD)
+	run_button = _button("RUN: ON", Color("#8a632b"), GOLD)
 	run_button.custom_minimum_size = Vector2(190, 40)
 	run_button.pressed.connect(_toggle_run)
 	movement_box.add_child(run_button)
@@ -551,9 +550,7 @@ func _open_menu() -> void:
 	hint_label.visible = false
 	move_panel.visible = false
 	menu_panel.visible = true
-	move_x = 0.0
-	move_z = 0.0
-	chase_ball = false
+	_clear_movement()
 
 func _start_mode(next_mode: String) -> void:
 	mode = next_mode
@@ -581,7 +578,7 @@ func _start_mode(next_mode: String) -> void:
 	hint_label.visible = true
 	menu_panel.visible = false
 	if mode == "golf":
-		hint_label.text = "HOLE 1  •  PAR 3  |  Reach the flag in fewest strokes"
+		hint_label.text = "Hold arrows / W A S D to move freely. Walk near the ball to hit."
 	elif mode == "defense":
 		hint_label.text = "DEFEND THE GATE  •  Aim at approaching enemies"
 	else:
@@ -622,8 +619,7 @@ func _press_swing() -> void:
 		return
 	if phase == "ready":
 		if not _near_ball():
-			hint_label.text = "TOO FAR! Walk/run to the ball or press GO TO BALL."
-			chase_ball = true
+			hint_label.text = "TOO FAR! Move the character toward the ball using arrows or W/A/S/D."
 			return
 		phase = "power"
 		meter_time = 0
@@ -762,7 +758,7 @@ func _reset_ball_to_tee() -> void:
 	ball.position = TEE
 	if is_instance_valid(golfer):
 		golfer.position = TEE + Vector3(1.45, -0.16, 0.75)
-	chase_ball = false
+	_clear_movement()
 	aim_degrees = 0
 	phase = "ready"
 	aim_guide.visible = true
@@ -844,11 +840,11 @@ func _refresh_ui() -> void:
 	spin_button.text = "SPIN %d" % spin_index
 	swing_button.disabled = phase == "flying" or phase == "done"
 	if mode == "golf" and phase == "ready" and not _near_ball():
-		swing_button.text = "GO TO BALL FIRST"
+		swing_button.text = "MOVE NEAR BALL"
 	if phase == "ready":
-		swing_button.text = "START SWING" if _near_ball() else "GO TO BALL FIRST"
+		swing_button.text = "START SWING" if _near_ball() else "MOVE NEAR BALL"
 		meter.value = power_percentage
-		meter_label.text = "NEAR BALL: " + ("YES" if _near_ball() else "NO") + "  •  RUN TO BALL"
+		meter_label.text = "BALL: " + ("IN RANGE" if _near_ball() else "TOO FAR") + "  •  FREE MOVE"
 	elif phase == "power":
 		swing_button.text = "LOCK POWER"
 		meter.value = power_percentage
@@ -876,8 +872,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				_adjust_aim(-4.0)
 			KEY_RIGHT:
 				_adjust_aim(4.0)
-			KEY_G:
-				_chase_golf_ball()
 			KEY_R:
 				_toggle_run()
 			KEY_TAB:
