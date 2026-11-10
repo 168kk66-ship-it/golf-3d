@@ -44,6 +44,11 @@ jobs:
             echo "Godot script validation failed"
             exit 1
           fi
+          godot --headless --path . --quit-after 4 2>&1 | tee godot-runtime.log
+          if grep -E 'SCRIPT ERROR|Invalid call|ERROR:|Parse Error' godot-runtime.log; then
+            echo "Godot runtime smoke test failed"
+            exit 1
+          fi
           godot --headless --path . --export-release Web web/index.html 2>&1 | tee godot-export.log
           if grep -E 'SCRIPT ERROR|Parse Error|Failed to load script' godot-export.log; then
             echo "Godot script validation failed during export"
